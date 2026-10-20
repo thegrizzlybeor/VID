@@ -67,7 +67,7 @@ jobs:
           CHUNK_GB: ${{ inputs.chunk_gb }}
           CREATE_RELEASES: ${{ inputs.storage != 'data-branch' && '1' || '0' }}
         run: |
-          pip install -q -U gallery-dl
+          pip install -q -U gallery-dl "yt-dlp[default,curl-cffi]" requests
           python3 scripts/expand.py
 
   fetch:
@@ -95,8 +95,9 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          pip install -q -U gallery-dl pillow pillow-heif
+          sudo apt-get install -y -qq ffmpeg aria2
+          pip install -q -U gallery-dl "yt-dlp[default,curl-cffi]" you-get \
+                            requests beautifulsoup4 pillow pillow-heif
 
       - name: Download + compress
         env:
