@@ -150,6 +150,22 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
+  number:
+    needs: [prepare, fetch]
+    if: always() && inputs.storage != 'data-branch' && needs.prepare.result == 'success' && needs.prepare.outputs.count != '0'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: number-releases
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Number files and releases (0, 1, 2, ...)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: python3 scripts/number_releases.py
+
   publish:
     needs: [prepare, fetch]
     if: always() && inputs.storage == 'data-branch' && needs.prepare.result == 'success' && needs.prepare.outputs.count != '0'
