@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
@@ -142,6 +143,41 @@ def plan(links, listed):
         cap, max_items = cap * 1.5, max_items * 2  # too many jobs -> make chunks bigger
 
 
+def precreate_releases(include, tags):
+    """Create every release up front, in a fixed order, so GitHub lists them in order.
+
+    GitHub sorts releases by creation time (newest first). If each fetch job created its
+    own release, the order would depend on which job finished first -> scrambled numbers.
+    So the releases are created here, highest number first, lowest last: the lowest
+    number ends up on top of the list. Releases that stay empty are deleted later by
+    number_releases.py.
+    """
+    if os.getenv("CREATE_RELEASES", "1") != "1":
+        return
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    sha = os.environ.get("GITHUB_SHA", "")
+    if not repo:
+        return
+    order = []
+    for e in include:
+        if e["tag"] not in order:
+            order.append(e["tag"])
+    for tag in reversed(order):
+        cmd = ["gh", "release", "create", tag, "--repo", repo,
+               "--title", tags.get(tag, tag), "--notes", ""]
+        if sha:
+            cmd += ["--target", sha]
+        ok = False
+        for _ in range(3):
+            if subprocess.run(cmd, capture_output=True, text=True).returncode == 0:
+                ok = True
+                break
+            time.sleep(3)
+        if not ok:
+            print(f"::warning::could not pre-create release {tag}; its fetch job will create it")
+        time.sleep(1.2)  # release timestamps have 1 second resolution
+
+
 def main():
     if os.getenv("COOKIES"):
         Path("cookies.txt").write_text(os.environ["COOKIES"])
@@ -183,10 +219,10 @@ def main():
         print(f"::warning::{len(include)} jobs, GitHub allows {MAX_JOBS}; using the first {MAX_JOBS}")
         include = include[:MAX_JOBS]
 
-    # Releases are NOT created here any more: each fetch job creates its release
-    # only after it has real files to upload. Pass the title along instead.
+    # Pass the title along to the fetch jobs (they create the release only if it is missing).
     for e in include:
         e["title"] = tags.get(e["tag"], e["tag"])
+    precreate_releases(include, tags)
 
     summary = ["## Plan", "| # | Release | Link | Files | Size | Jobs |", "|---|---|---|---|---|---|"]
     summary += [f"| {i} | {t.replace('|', chr(92) + '|')} | {u} | {n} | {s} | {j} |" for i, t, u, n, s, j in rows]
