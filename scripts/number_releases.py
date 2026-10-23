@@ -171,7 +171,14 @@ def main():
     for _, _, r in mine:
         assets = list_assets(r["id"])
         if not assets:
-            print(f"- {r['tag']}: no files, skipped")
+            if DRY:
+                print(f"- {r['tag']}: no files, would be deleted")
+            else:
+                print(f"- {r['tag']}: no files, deleting the empty release")
+                try:
+                    gh("release", "delete", r["tag"], "--repo", REPO, "--cleanup-tag", "-y")
+                except RuntimeError as e:
+                    print(f"::warning::could not delete empty release {r['tag']}: {e}")
             continue
         renames, number, title = plan_release(assets, number)
         plans.append((r, renames, title))
